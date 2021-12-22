@@ -1,0 +1,3 @@
+rootProject.name = "CameraXQRcode"
+include ':app'
+include ':lib_cameraxqrcode'
