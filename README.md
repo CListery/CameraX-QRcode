@@ -53,14 +53,20 @@ implementation 'io.github.clistery:camerax-scanner-qrcode:1.1.1'
   switchFlash()
   ```
 
+- decode ImageProxy
+
+  ```kotlin
+  QRCodeParser().decodeImageProxy(imageProxy, success, fail)
+  ```
+
 - decode image uri
 
   ```kotlin
-  decodeImageUri(fileUri, success, fail)
+  QRCodeParser().decodeImageUri(context, fileUri, success, fail)
   ```
 
 - decode bitmap
 
   ```kotlin
-  decodeBitmap(bitmap, success, fail)
+  QRCodeParser().decodeBitmap(originBitmap, success, fail)
   ```

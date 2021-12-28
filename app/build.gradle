@@ -47,5 +47,5 @@ dependencies {
     implementation 'io.github.clistery:stream-arl:1.0.3'
 
 //    implementation project(path: ':lib_cameraxqrcode')
-    implementation 'io.github.clistery:camerax-scanner-qrcode:1.1.1'
+    implementation 'io.github.clistery:camerax-scanner-qrcode:1.1.2'
 }

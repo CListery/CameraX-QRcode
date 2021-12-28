@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.yh.cameraxqrcode.demo.databinding.ActMainBinding
+import com.yh.cxqr.QRCodeParser
 import com.yh.cxqr.QRScannerView
 import com.yh.cxqr.model.Barcode
 import com.yh.sarl.launcher.ContractType
@@ -80,7 +81,7 @@ class MainAct : AppCompatActivity() {
                 .launch()
                 .onSuccess {
                     binding.scanner.stopScan()
-                    binding.scanner.decodeImageUriWithTimed(it,
+                    QRCodeParser().decodeImageUriWithTimed(applicationContext, it,
                         success = { result ->
                             Log.d("MainAct", "decodeImageUri: $result")
                             runOnUiThread {

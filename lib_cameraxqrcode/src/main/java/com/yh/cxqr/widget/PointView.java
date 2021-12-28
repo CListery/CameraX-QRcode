@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.yh.cxqr;
+package com.yh.cxqr.widget;
 
 import android.annotation.SuppressLint;
 import android.content.Context;

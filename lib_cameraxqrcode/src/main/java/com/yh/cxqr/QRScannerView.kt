@@ -3,9 +3,7 @@ package com.yh.cxqr
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.Bitmap
 import android.graphics.Rect
-import android.net.Uri
 import android.os.Build
 import android.util.AttributeSet
 import android.util.Log
@@ -33,13 +31,14 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.yh.cxqr.camerax.QRCodeAnalyzer
 import com.yh.cxqr.model.Barcode
 import com.yh.cxqr.utils.DisplayUtils
+import com.yh.cxqr.widget.LineView
+import com.yh.cxqr.widget.ResultView
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.time.ExperimentalTime
 
 class QRScannerView : FrameLayout {
     private companion object {
@@ -192,7 +191,6 @@ class QRScannerView : FrameLayout {
                 Log.d(TAG, "onDetach")
                 stopScan(false)
                 cameraExecutor.shutdown()
-                qrRCodeAnalyzer.destroy()
                 cc.unbind()
                 cameraControl = null
             }
@@ -283,37 +281,6 @@ class QRScannerView : FrameLayout {
                 removeCallbacks(autoFocus)
             }
             cameraControl = null
-        }
-    }
-
-    fun decodeImageUri(fileUri: Uri, success: (Barcode) -> Unit, fail: (() -> Unit)? = null) {
-        cameraExecutor.submit {
-            qrRCodeAnalyzer.decodeImageUri(context, fileUri)?.also(success) ?: fail?.invoke()
-        }
-    }
-
-    @ExperimentalTime
-    fun decodeImageUriWithTimed(
-        fileUri: Uri,
-        success: (Barcode) -> Unit,
-        fail: (() -> Unit)? = null
-    ) {
-        cameraExecutor.submit {
-            qrRCodeAnalyzer.decodeImageUriWithTimed(context, fileUri)?.also(success)
-                ?: fail?.invoke()
-        }
-    }
-
-    fun decodeBitmap(bitmap: Bitmap, success: (Barcode) -> Unit, fail: (() -> Unit)?) {
-        cameraExecutor.submit {
-            qrRCodeAnalyzer.decodeBitmap(bitmap)?.also(success) ?: fail?.invoke()
-        }
-    }
-
-    @ExperimentalTime
-    fun decodeBitmapWithTimed(bitmap: Bitmap, success: (Barcode) -> Unit, fail: (() -> Unit)?) {
-        cameraExecutor.submit {
-            qrRCodeAnalyzer.decodeBitmapWithTimed(bitmap)?.also(success) ?: fail?.invoke()
         }
     }
 
