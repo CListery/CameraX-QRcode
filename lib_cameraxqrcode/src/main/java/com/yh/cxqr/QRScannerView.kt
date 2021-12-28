@@ -1,6 +1,7 @@
 package com.yh.cxqr
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -219,11 +220,18 @@ class QRScannerView : FrameLayout {
         )
     }
 
+    val flashState get() = TorchState.ON == cc.torchState.value
+
     fun switchFlash() {
-        when (cc.torchState.value) {
-            TorchState.ON -> cc.enableTorch(false)
-            TorchState.OFF -> cc.enableTorch(true)
+        if (!deviceSupportFlash()) {
+            Log.e(TAG, "switchFlash: device not support Flash!")
+            return
         }
+        cc.enableTorch(!flashState)
+    }
+
+    private fun deviceSupportFlash(): Boolean {
+        return context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)
     }
 
     @MainThread
@@ -243,9 +251,13 @@ class QRScannerView : FrameLayout {
 
         cameraControl = cc.cameraControl
 
-        if (!enableTapFocus) {
+        if (!enableTapFocus && deviceSupportAutoFocus()) {
             requestCameraFocus()
         }
+    }
+
+    private fun deviceSupportAutoFocus(): Boolean {
+        return context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_AUTOFOCUS)
     }
 
     private fun requestCameraFocus() {
