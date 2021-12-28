@@ -2,7 +2,9 @@ package com.yh.cxqr
 
 import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Build
 import android.util.AttributeSet
 import android.util.Log
@@ -15,6 +17,7 @@ import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.annotation.MainThread
 import androidx.camera.core.*
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
@@ -31,9 +34,11 @@ import com.yh.cxqr.model.Barcode
 import com.yh.cxqr.utils.DisplayUtils
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.time.ExperimentalTime
 
 class QRScannerView : FrameLayout {
     private companion object {
@@ -41,6 +46,10 @@ class QRScannerView : FrameLayout {
 
         private const val RATIO_4_3_VALUE = 4.0 / 3.0
         private const val RATIO_16_9_VALUE = 16.0 / 9.0
+
+        // Auto focus is 1/6 of the area.
+        private const val AF_SIZE = 1.0f / 6.0f
+        private const val AE_SIZE = AF_SIZE * 1.5f
     }
 
     constructor(context: Context) : super(context)
@@ -95,8 +104,34 @@ class QRScannerView : FrameLayout {
 
     private val lineView: LineView = LineView(context)
     private val resultView: ResultView = ResultView(context)
-    private val focusView: ImageView = ImageView(context)
-    private val focusSize = DisplayUtils.dp2px(context, 60)
+
+    private var cameraControl: CameraControl? = null
+    private val meteringPointFactory by lazy { SurfaceOrientedMeteringPointFactory(1F, 1F) }
+    private val autoFocus by lazy {
+        Runnable {
+            cameraControl?.runCatching {
+                // AF 自动对焦
+                val afPoint = meteringPointFactory.createPoint(0.5F, 0.5F, AF_SIZE)
+                // AE 自动曝光
+                val aePoint = meteringPointFactory.createPoint(0.5F, 0.5F, AE_SIZE)
+                val focusMeteringAction =
+                    FocusMeteringAction.Builder(afPoint, FocusMeteringAction.FLAG_AF)
+                        .addPoint(aePoint, FocusMeteringAction.FLAG_AE)
+                        .setAutoCancelDuration(5, TimeUnit.SECONDS)
+                        .build()
+                startFocusAndMetering(focusMeteringAction).addListener(
+                    this@QRScannerView::requestCameraFocus,
+                    cameraExecutor
+                )
+            }?.onFailure {
+                it.printStackTrace()
+            }
+        }
+    }
+
+    private var enableTapFocus = false
+    private val focusView: ImageView by lazy { ImageView(context) }
+    private val focusSize: Int by lazy { DisplayUtils.dp2px(context, 60) }
     private val focusAnim by lazy {
         AnimationUtils.loadAnimation(context, R.anim.focus_anim).also {
             it.setAnimationListener(object : Animation.AnimationListener {
@@ -123,12 +158,16 @@ class QRScannerView : FrameLayout {
         addView(preView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(lineView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         lineView.visibility = View.GONE
-        addView(focusView, LayoutParams(focusSize, focusSize))
-        addView(resultView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        focusView.visibility = View.INVISIBLE
-        focusView.setImageResource(R.drawable.icon_focus)
+        if (enableTapFocus) {
+            addView(focusView, LayoutParams(focusSize, focusSize))
+            focusView.visibility = View.INVISIBLE
+            focusView.setImageResource(R.drawable.icon_focus)
+            setOnTouchListener(focusTouchListener)
+        }
 
-        setOnTouchListener(focusTouchListener)
+        addView(resultView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+
+        initCameraController()
 
         doOnAttach {
             Log.d(TAG, "onAttach")
@@ -136,13 +175,7 @@ class QRScannerView : FrameLayout {
             loadDisplayInfo()
 
             findViewTreeLifecycleOwner()!!.runCatching {
-                cc.bindToLifecycle(this)
-
-                initCameraController()
-
                 preView.controller = cc
-
-                cc.isTapToFocusEnabled = true
 
                 cc.zoomState.observe(this, object : Observer<ZoomState> {
                     override fun onChanged(t: ZoomState?) {
@@ -150,6 +183,8 @@ class QRScannerView : FrameLayout {
                         observeCameraState(cc.cameraInfo, this@runCatching)
                     }
                 })
+
+                cc.bindToLifecycle(this)
             }
 
             doOnDetach {
@@ -158,6 +193,7 @@ class QRScannerView : FrameLayout {
                 cameraExecutor.shutdown()
                 qrRCodeAnalyzer.destroy()
                 cc.unbind()
+                cameraControl = null
             }
         }
     }
@@ -173,6 +209,7 @@ class QRScannerView : FrameLayout {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             windowManager?.currentWindowMetrics?.bounds?.also(preRect::set)
         } else {
+            @Suppress("DEPRECATION")
             windowManager?.defaultDisplay?.getRectSize(preRect)
         }
         screenAspectRatio = aspectRatio(preRect.width(), preRect.height())
@@ -189,6 +226,7 @@ class QRScannerView : FrameLayout {
         }
     }
 
+    @MainThread
     fun beginScan() {
         if (isScanning) {
             return
@@ -202,8 +240,20 @@ class QRScannerView : FrameLayout {
         cc.clearImageAnalysisAnalyzer()
 
         cc.setImageAnalysisAnalyzer(cameraExecutor, qrRCodeAnalyzer)
+
+        cameraControl = cc.cameraControl
+
+        if (!enableTapFocus) {
+            requestCameraFocus()
+        }
     }
 
+    private fun requestCameraFocus() {
+        removeCallbacks(autoFocus)
+        postDelayed(autoFocus, 1000)
+    }
+
+    @MainThread
     @JvmOverloads
     fun stopScan(resetZoom: Boolean = true) {
         if (isScanning) {
@@ -214,14 +264,49 @@ class QRScannerView : FrameLayout {
                 cc.zoomState.value?.minZoomRatio?.also {
                     cc.setZoomRatio(it)
                 }
-            } else {
-//                preView.controller = null
             }
             isScanning = false
+
+            if (!enableTapFocus) {
+                removeCallbacks(autoFocus)
+            }
+            cameraControl = null
+        }
+    }
+
+    fun decodeImageUri(fileUri: Uri, success: (Barcode) -> Unit, fail: (() -> Unit)? = null) {
+        cameraExecutor.submit {
+            qrRCodeAnalyzer.decodeImageUri(context, fileUri)?.also(success) ?: fail?.invoke()
+        }
+    }
+
+    @ExperimentalTime
+    fun decodeImageUriWithTimed(
+        fileUri: Uri,
+        success: (Barcode) -> Unit,
+        fail: (() -> Unit)? = null
+    ) {
+        cameraExecutor.submit {
+            qrRCodeAnalyzer.decodeImageUriWithTimed(context, fileUri)?.also(success)
+                ?: fail?.invoke()
+        }
+    }
+
+    fun decodeBitmap(bitmap: Bitmap, success: (Barcode) -> Unit, fail: (() -> Unit)?) {
+        cameraExecutor.submit {
+            qrRCodeAnalyzer.decodeBitmap(bitmap)?.also(success) ?: fail?.invoke()
+        }
+    }
+
+    @ExperimentalTime
+    fun decodeBitmapWithTimed(bitmap: Bitmap, success: (Barcode) -> Unit, fail: (() -> Unit)?) {
+        cameraExecutor.submit {
+            qrRCodeAnalyzer.decodeBitmapWithTimed(bitmap)?.also(success) ?: fail?.invoke()
         }
     }
 
     private fun initCameraController() {
+        cc.isTapToFocusEnabled = enableTapFocus
         cc.cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
         cc.setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
     }

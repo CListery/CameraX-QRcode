@@ -1,7 +1,8 @@
 package com.yh.cxqr.camerax
 
-import android.graphics.Bitmap
-import android.graphics.Rect
+import android.content.Context
+import android.graphics.*
+import android.net.Uri
 import android.util.Log
 import androidx.annotation.WorkerThread
 import androidx.camera.core.ImageAnalysis
@@ -9,14 +10,14 @@ import androidx.camera.core.ImageProxy
 import com.google.zxing.*
 import com.google.zxing.common.HybridBinarizer
 import com.yh.cxqr.model.Barcode
-import com.yh.cxqr.utils.rotate
-import com.yh.cxqr.utils.toLuminance
+import com.yh.cxqr.utils.*
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 import kotlin.time.ExperimentalTime
 import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
+
 
 internal class QRCodeAnalyzer(private val resultHandler: (barcode: Barcode?, nextBlock: () -> Unit) -> Unit) :
     ImageAnalysis.Analyzer {
@@ -25,7 +26,6 @@ internal class QRCodeAnalyzer(private val resultHandler: (barcode: Barcode?, nex
         setHints(QRCODE_HINTS)
     }
 
-    @ExperimentalTime
     @androidx.camera.core.ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         imageProxy.runCatching {
@@ -36,41 +36,101 @@ internal class QRCodeAnalyzer(private val resultHandler: (barcode: Barcode?, nex
         }
     }
 
-    @ExperimentalTime
     @WorkerThread
     @androidx.camera.core.ExperimentalGetImage
     private fun processImage(imageProxy: ImageProxy) = runBlocking { decode(imageProxy) }
 
-    @ExperimentalTime
     @WorkerThread
     @androidx.camera.core.ExperimentalGetImage
-    fun decode(imageProxy: ImageProxy): Barcode? = decodeInternal(imageProxy)
-
-    @ExperimentalTime
-    @androidx.camera.core.ExperimentalGetImage
-    fun decodeInternal(imageProxy: ImageProxy): Barcode? = measureTimedValue {
-        val image = imageProxy.image ?: return null
-        val luminancePlane = image.toLuminance().rotate(imageProxy.imageInfo.rotationDegrees)
-        val source = PlanarYUVLuminanceSource(
-            luminancePlane.byteArray,
-            luminancePlane.width,
-            luminancePlane.height,
-            0,
-            0,
-            luminancePlane.width,
-            luminancePlane.height,
-            false
-        )
-        val bitmap = BinaryBitmap(HybridBinarizer(source))
-        val result = kotlin.runCatching {
-            Barcode.parse(reader.decode(bitmap), imageProxy)
+    fun decode(imageProxy: ImageProxy): Barcode? {
+        return kotlin.runCatching {
+            val image = imageProxy.image ?: return null
+            val luminancePlane = image.toLuminance().rotate(imageProxy.imageInfo.rotationDegrees)
+            val source = PlanarYUVLuminanceSource(
+                luminancePlane.byteArray,
+                luminancePlane.width,
+                luminancePlane.height,
+                0,
+                0,
+                luminancePlane.width,
+                luminancePlane.height,
+                false
+            )
+            val bitmap = BinaryBitmap(HybridBinarizer(source))
+            return Barcode.parse(reader.decode(bitmap), imageProxy)
         }.onFailure {
             it.printStackTrace()
         }.getOrNull()
-        return@measureTimedValue result
+    }
+
+    @ExperimentalTime
+    @androidx.camera.core.ExperimentalGetImage
+    fun decodeWithTimed(imageProxy: ImageProxy): Barcode? =
+        measureTimedValue { decode(imageProxy) }
+            .also { it.log() }
+            .value
+
+    fun decodeImageUri(context: Context, fileUri: Uri): Barcode? {
+        return kotlin.runCatching {
+            return@runCatching context.contentResolver.openInputStream(fileUri)
+                ?.buffered()
+                ?.use { bis ->
+                    val originBitmap = ImageUtils.getBitmapByStream(bis)
+                        ?: throw NullPointerException("origin bitmap load fail!")
+                    val source = RGBLuminanceSource(
+                        originBitmap.width,
+                        originBitmap.height,
+                        originBitmap.copyPixels()
+                    )
+                    // 注释方法比较慢
+//                val luminancePlane = originBitmap
+//                    .toLuminance()
+//                    .rotate(ImageUtils.getImageFileRotate(bis))
+//                val source = PlanarYUVLuminanceSource(
+//                    luminancePlane.byteArray,
+//                    luminancePlane.width,
+//                    luminancePlane.height,
+//                    0,
+//                    0,
+//                    luminancePlane.width,
+//                    luminancePlane.height,
+//                    false
+//                )
+                    val bitmap = BinaryBitmap(HybridBinarizer(source))
+                    return@use Barcode.parse(reader.decode(bitmap))
+                }
+        }.onFailure {
+            it.printStackTrace()
+        }.getOrNull()
+    }
+
+    @ExperimentalTime
+    fun decodeImageUriWithTimed(context: Context, fileUri: Uri): Barcode? = measureTimedValue {
+        decodeImageUri(context, fileUri)
     }.also {
         it.log()
     }.value
+
+    fun decodeBitmap(originBitmap: Bitmap): Barcode? {
+        val source = RGBLuminanceSource(
+            originBitmap.width,
+            originBitmap.height,
+            originBitmap.copyPixels()
+        )
+        val bitmap = BinaryBitmap(HybridBinarizer(source))
+        val result = kotlin.runCatching {
+            Barcode.parse(reader.decode(bitmap))
+        }.onFailure {
+            it.printStackTrace()
+        }.getOrNull()
+        return result
+    }
+
+    @ExperimentalTime
+    fun decodeBitmapWithTimed(originBitmap: Bitmap): Barcode? =
+        measureTimedValue { decodeBitmap(originBitmap) }
+            .also { it.log() }
+            .value
 
     companion object {
 

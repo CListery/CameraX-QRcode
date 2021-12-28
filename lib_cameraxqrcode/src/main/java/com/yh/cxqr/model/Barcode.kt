@@ -33,7 +33,7 @@ sealed class Barcode {
         }
 
         @JvmStatic
-        fun parse(result: Result, imageProxy: ImageProxy): Barcode {
+        fun parse(result: Result, imageProxy: ImageProxy? = null): Barcode {
             val value = result.text
             val valueUri = value?.toUri()
             val scheme = valueUri?.scheme?.uppercase()
@@ -49,7 +49,7 @@ sealed class Barcode {
                 }
             }
             barcode.points = result.resultPoints
-            barcode.imageCropRect.set(imageProxy.cropRect)
+            imageProxy?.cropRect?.also { barcode.imageCropRect.set(it) }
             return barcode
         }
     }

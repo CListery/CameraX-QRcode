@@ -1,7 +1,9 @@
 package com.yh.cxqr.utils
 
+import android.graphics.Bitmap
 import android.graphics.ImageFormat.YUV_420_888
 import android.media.Image
+import android.util.Log
 import java.nio.ByteBuffer
 
 class Luminance(val byteArray: ByteArray, val width: Int, val height: Int)
@@ -31,10 +33,18 @@ fun Luminance.rotate(rotationDegrees: Int): Luminance {
  */
 fun Image.toLuminance(): Luminance {
     require(format == YUV_420_888) { "Unexpected format, expected $YUV_420_888 but got $format instead." }
-    return Luminance(byteArray = planes[0].buffer.toByteArray().also { format }, width = width, height = height)
+    return Luminance(byteArray = planes[0].buffer.toByteArray(), width = width, height = height)
 }
 
-/**
- * ByteBuffer is expected to already be [ByteBuffer.rewind]'ed.
- */
-private fun ByteBuffer.toByteArray(): ByteArray = ByteArray(capacity()).apply { get(this) }
+fun Bitmap.toLuminance(): Luminance {
+//    Log.d("Luminance", "toLuminance: $config")
+//    return Luminance(byteArray = toYUV(), width = width, height = height)
+    return Luminance(byteArray = toYUV2(), width = width, height = height)
+}
+
+private fun ByteBuffer.toByteArray(): ByteArray = ByteArray(capacity()).apply {
+    if(position() != 0) {
+        rewind()
+    }
+    get(this)
+}
