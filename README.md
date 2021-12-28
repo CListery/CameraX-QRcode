@@ -12,7 +12,7 @@ ZXing QR code package library implemented by CameraX
 ## Download
 
 ```gradle
-implementation 'io.github.clistery:camerax-scanner-qrcode:1.1.1'
+implementation 'io.github.clistery:camerax-scanner-qrcode:1.1.2'
 ```
 
 ## USE
