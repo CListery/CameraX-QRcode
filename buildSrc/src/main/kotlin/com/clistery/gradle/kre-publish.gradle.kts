@@ -1,4 +1,5 @@
 import org.gradle.kotlin.dsl.extra
+import com.clistery.gradle.AppConfig
 
 plugins {
     `maven-publish`
@@ -27,6 +28,8 @@ publishing {
             val publicName = "${rootProject.name} ${name.capitalize()}"
             pom {
                 name.set(publicName)
+                description.set(AppConfig.desc)
+                url.set(AppConfig.url)
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -40,6 +43,11 @@ publishing {
                         name.set("CListery")
                         email.set("cai1083088795@gmail.com")
                     }
+                }
+                scm {
+                    url.set(AppConfig.url)
+                    connection.set("scm:${AppConfig.scm}")
+                    developerConnection.set("scm:${AppConfig.scm}")
                 }
                 withXml {
                     val allDependenciesNode = asNode().appendNode("dependencies")

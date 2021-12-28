@@ -13,5 +13,6 @@ sourceSets.main {
     java {
         setSrcDirs(setOf(projectDir.parentFile.resolve("src/main/kotlin")))
         include("com/clistery/gradle/Dependencies.kt")
+        include("com/clistery/gradle/AppConfig.kt")
     }
 }
